@@ -1,59 +1,109 @@
-# CribbFrontend
+# Cribb
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 19.1.6.
+Cribb is a roommate management application designed to streamline apartment group coordination for chores and shared pantry management. The application is built with Angular 19 and Go 1.23, providing a comprehensive solution for household task management and inventory tracking.
 
-## Development server
+## Features
 
-To start a local development server, run:
+### Authentication & User Management
+- User registration and login system
+- JWT-based authentication for secure access
+- Create apartment groups
+- Join existing apartment groups using group codes
+- Secure logout functionality
 
+### Chore Management
+- Create individual or recurring chores for your apartment group
+- Earn points for completing chores
+- Set due dates and reminders
+- Automated chore rotation for recurring tasks (e.g., weekly kitchen cleaning)
+- Delete chores as needed
+
+### Pantry Management
+- Track shared pantry items and quantities
+- Real-time updates for consumed items
+- Automated notifications for depleted stock
+- Monitor expiration dates
+
+### Shopping List
+- Add items from pantry or create new entries
+- Group shopping lists for shared purchases
+- Transfer items from shopping cart directly to pantry
+- Track out-of-stock and expired items
+
+## Technology Stack
+
+### Frontend
+- Angular CLI: 19.1.6
+- Node: 20.16.0
+- Package Manager: npm 10.8.1
+- Angular: 19.1.5 (animations, common, compiler, forms, router)
+
+### Backend
+- Go 1.23.3
+- JWT authentication
+- No additional frameworks used
+
+## Getting Started
+
+### Prerequisites
+- Node.js v20.16.0 or higher
+- Go 1.23.3 or higher
+- npm 10.8.1 or higher
+
+### Installation
+
+1. Clone the repository
 ```bash
+git clone https://github.com/yourusername/cribb.git
+cd cribb
+```
+
+2. Backend Setup
+```bash
+cd backend
+go mod init cribb # Initialize module if not already done
+go mod tidy # Install all dependencies
+go run main.go
+```
+
+3. Frontend Setup
+```bash
+cd frontend
+npm install
 ng serve
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+The application will be available at `http://localhost:4200`
 
-## Code scaffolding
+## Usage
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+1. **Register/Login**: Create an account or login with existing credentials
+2. **Create/Join a Group**: 
+   - Create a new apartment group and get a unique group code
+   - Join an existing group using the group code
+3. **Add Chores**: Create one-time or recurring chores for your group
+4. **Manage Pantry**: Add and update items in your shared pantry
+5. **Shopping List**: Create shopping lists and transfer items to pantry
+6. **Logout**: Securely logout from your account
 
-```bash
-ng generate component component-name
-```
+## Contributing
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+Contributions are welcome. Please feel free to submit a Pull Request.
 
-```bash
-ng generate --help
-```
+## License
 
-## Building
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-To build the project run:
+## System Requirements
 
-```bash
-ng build
-```
+- Windows 10/11, macOS, or Linux
+- 4GB RAM minimum
+- 500MB disk space
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+## Support
 
-## Running unit tests
+For support or feedback, please open an issue in the GitHub repository.
 
-To execute unit tests with the [Karma](https://karma-runner.github.io) test runner, use the following command:
+## Authors
 
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+Developed for students and apartment dwellers to simplify shared living management.
