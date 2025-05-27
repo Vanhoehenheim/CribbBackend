@@ -188,8 +188,24 @@ func CompleteChoreHandler(w http.ResponseWriter, r *http.Request) {
 					return nil, err
 				}
 
-				// Create next chore instance
-				nextChore := models.CreateChoreFromRecurring(&recurringChore)
+				// Create next chore instance using the completed chore's due date as base
+				nextChore := models.CreateChoreFromRecurringWithBaseDate(&recurringChore, chore.DueDate)
+
+				// Update the recurring chore's current index in the database to persist the rotation
+				_, err = config.DB.Collection("recurring_chores").UpdateOne(
+					sessionContext,
+					bson.M{"_id": recurringChore.ID},
+					bson.M{
+						"$set": bson.M{
+							"current_index": recurringChore.CurrentIndex,
+							"updated_at":    now,
+						},
+					},
+				)
+				if err != nil {
+					return nil, err
+				}
+
 				_, err = config.DB.Collection("chores").InsertOne(sessionContext, nextChore)
 				if err != nil {
 					return nil, err

@@ -143,3 +143,37 @@ func CreateChoreFromRecurring(recurringChore *RecurringChore) *Chore {
 		UpdatedAt:   time.Now(),
 	}
 }
+
+// CreateChoreFromRecurringWithBaseDate creates a new chore instance from a recurring chore with a specific base date
+func CreateChoreFromRecurringWithBaseDate(recurringChore *RecurringChore, baseDate time.Time) *Chore {
+	// Get the next assignee
+	assignedTo := recurringChore.GetNextAssignee()
+
+	// Calculate due date based on frequency from the base date
+	dueDate := baseDate
+	switch recurringChore.Frequency {
+	case "daily":
+		dueDate = dueDate.Add(24 * time.Hour)
+	case "weekly":
+		dueDate = dueDate.Add(7 * 24 * time.Hour)
+	case "biweekly":
+		dueDate = dueDate.Add(14 * 24 * time.Hour)
+	case "monthly":
+		dueDate = dueDate.AddDate(0, 1, 0)
+	}
+
+	return &Chore{
+		Title:       recurringChore.Title,
+		Description: recurringChore.Description,
+		Type:        ChoreTypeRecurring,
+		GroupID:     recurringChore.GroupID,
+		AssignedTo:  assignedTo,
+		Status:      ChoreStatusPending,
+		Points:      recurringChore.Points,
+		StartDate:   time.Now(),
+		DueDate:     dueDate,
+		RecurringID: recurringChore.ID,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+}
