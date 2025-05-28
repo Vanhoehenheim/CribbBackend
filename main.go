@@ -54,6 +54,7 @@ func main() {
 
 	// Pantry routes - existing - wrap with CORS middleware
 	http.HandleFunc("/api/pantry/add", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.AddPantryItemHandler)))
+	http.HandleFunc("/api/pantry/update/", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.UpdatePantryItemHandler)))
 	http.HandleFunc("/api/pantry/use", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.UsePantryItemHandler)))
 	http.HandleFunc("/api/pantry/list", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.GetPantryItemsHandler)))
 	http.HandleFunc("/api/pantry/remove/", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.DeletePantryItemHandler)))

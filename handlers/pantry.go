@@ -28,6 +28,16 @@ type AddPantryItemRequest struct {
 	GroupName      string  `json:"group_name"`
 }
 
+// UpdatePantryItemRequest defines the request structure for updating a pantry item
+type UpdatePantryItemRequest struct {
+	Name           string  `json:"name"`
+	Quantity       float64 `json:"quantity"`
+	Unit           string  `json:"unit"`
+	Category       string  `json:"category"`
+	ExpirationDate *string `json:"expiration_date,omitempty"`
+	GroupName      string  `json:"group_name"`
+}
+
 // UsePantryItemRequest defines the request structure for using a pantry item
 type UsePantryItemRequest struct {
 	ItemID   string  `json:"item_id"`
@@ -442,6 +452,199 @@ func AddPantryItemHandler(w http.ResponseWriter, r *http.Request) {
 				request.Quantity-oldQuantity,
 			)
 		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(pantryItem)
+}
+
+// UpdatePantryItemHandler handles updating an existing pantry item by ID
+func UpdatePantryItemHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get user from context (set by AuthMiddleware)
+	userClaims, ok := middleware.GetUserFromContext(r.Context())
+	if !ok {
+		http.Error(w, "User not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	// Get item ID from URL path
+	itemIDStr := strings.TrimPrefix(r.URL.Path, "/api/pantry/update/")
+	if itemIDStr == "" {
+		http.Error(w, "Item ID is required", http.StatusBadRequest)
+		return
+	}
+
+	// Convert item ID to ObjectID
+	itemID, err := primitive.ObjectIDFromHex(itemIDStr)
+	if err != nil {
+		http.Error(w, "Invalid item ID format", http.StatusBadRequest)
+		return
+	}
+
+	var request UpdatePantryItemRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate required fields
+	if request.Name == "" || request.Quantity < 0 || request.Unit == "" || request.GroupName == "" {
+		http.Error(w, "Name, quantity, unit, and group name are required", http.StatusBadRequest)
+		return
+	}
+
+	// Find the group
+	var group models.Group
+	err = config.DB.Collection("groups").FindOne(
+		context.Background(),
+		bson.M{"name": request.GroupName},
+	).Decode(&group)
+
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			http.Error(w, "Group not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Failed to fetch group", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Get user ID
+	userID, err := primitive.ObjectIDFromHex(userClaims.ID)
+	if err != nil {
+		http.Error(w, "Invalid user ID", http.StatusBadRequest)
+		return
+	}
+
+	// Find user to verify group membership
+	var user models.User
+	err = config.DB.Collection("users").FindOne(
+		context.Background(),
+		bson.M{"_id": userID},
+	).Decode(&user)
+
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			http.Error(w, "User not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Failed to fetch user", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Verify user belongs to the group
+	if user.GroupID != group.ID {
+		http.Error(w, "User is not a member of this group", http.StatusForbidden)
+		return
+	}
+
+	// Parse expiration date if provided
+	var expirationDate time.Time
+	if request.ExpirationDate != nil && *request.ExpirationDate != "" {
+		expirationDate, err = time.Parse(time.RFC3339, *request.ExpirationDate)
+		if err != nil {
+			http.Error(w, "Invalid expiration date format. Use ISO 8601/RFC3339 format (YYYY-MM-DDTHH:MM:SSZ)", http.StatusBadRequest)
+			return
+		}
+	}
+
+	// Start a transaction
+	session, err := config.DB.Client().StartSession()
+	if err != nil {
+		log.Printf("Failed to start MongoDB session: %v", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	defer session.EndSession(context.Background())
+
+	// Start transaction
+	var pantryItem models.PantryItem
+	var oldQuantity float64 = 0
+
+	err = mongo.WithSession(context.Background(), session, func(sc mongo.SessionContext) error {
+		// Find the existing item by ID
+		err := config.DB.Collection("pantry_items").FindOne(
+			sc,
+			bson.M{"_id": itemID},
+		).Decode(&pantryItem)
+
+		if err != nil {
+			if errors.Is(err, mongo.ErrNoDocuments) {
+				return errors.New("pantry item not found")
+			}
+			return err
+		}
+
+		// Verify the item belongs to the user's group
+		if pantryItem.GroupID != user.GroupID {
+			return errors.New("pantry item does not belong to user's group")
+		}
+
+		oldQuantity = pantryItem.Quantity
+
+		// Update the item fields
+		pantryItem.Name = request.Name
+		pantryItem.Quantity = request.Quantity
+		pantryItem.Unit = request.Unit
+		if request.Category != "" {
+			pantryItem.Category = request.Category
+		}
+		if !expirationDate.IsZero() {
+			pantryItem.ExpirationDate = expirationDate
+		}
+		pantryItem.UpdatedAt = time.Now()
+
+		// Update the item in the database
+		_, err = config.DB.Collection("pantry_items").UpdateOne(
+			sc,
+			bson.M{"_id": pantryItem.ID},
+			bson.M{"$set": pantryItem},
+		)
+		if err != nil {
+			return err
+		}
+
+		// Check if we need to create expiration notification
+		if !expirationDate.IsZero() && pantryItem.IsExpiringSoon(3) {
+			notification := models.CreatePantryNotification(
+				group.ID,
+				pantryItem.ID,
+				pantryItem.Name,
+				models.NotificationTypeExpiringSoon,
+				"Item will expire in 3 days or less",
+			)
+			_, err = config.DB.Collection("pantry_notifications").InsertOne(sc, notification)
+			if err != nil {
+				log.Printf("Failed to create expiration notification: %v", err)
+				// Continue anyway, as this is not critical
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		log.Printf("Transaction failed: %v", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Create history record for updating the item
+	if oldQuantity != request.Quantity {
+		UpdatePantryHistoryForAdd(
+			group.ID,
+			pantryItem.ID,
+			pantryItem.Name,
+			userID,
+			user.Name,
+			request.Quantity-oldQuantity,
+		)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
