@@ -1,6 +1,7 @@
 .env
 coverage.out
 sprint4.md
+tree.txt
 *.DS_Store
 */.DS_Store
 *.sh

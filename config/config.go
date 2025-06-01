@@ -248,6 +248,101 @@ func initializeDatabase() error {
 		return fmt.Errorf("failed to create shopping cart indexes: %v", err)
 	}
 
+	// Create pantry_categories collection with indexes
+	categoriesCollection := DB.Collection("pantry_categories")
+	categoriesIndexes := []mongo.IndexModel{
+		{
+			Keys: bson.D{{Key: "name", Value: 1}, {Key: "group_id", Value: 1}},
+			Options: options.Index().SetUnique(true).SetPartialFilterExpression(bson.M{
+				"group_id": bson.M{"$exists": true},
+			}),
+		},
+		{
+			Keys: bson.D{{Key: "type", Value: 1}},
+		},
+		{
+			Keys: bson.D{{Key: "group_id", Value: 1}},
+		},
+		{
+			Keys: bson.D{{Key: "is_active", Value: 1}},
+		},
+	}
+	_, err = categoriesCollection.Indexes().CreateMany(ctx, categoriesIndexes)
+	if err != nil {
+		return fmt.Errorf("failed to create pantry categories indexes: %v", err)
+	}
+
+	// Seed predefined categories if they don't exist
+	if err := seedPredefinedCategories(); err != nil {
+		log.Printf("Warning: Could not seed predefined categories: %v", err)
+		// Continue anyway, as this might not be critical
+	}
+
 	log.Println("Successfully initialized database collections and indexes")
+	return nil
+}
+
+// seedPredefinedCategories seeds the database with predefined pantry categories
+func seedPredefinedCategories() error {
+	if DB == nil {
+		return fmt.Errorf("database connection not initialized")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Check if predefined categories already exist
+	count, err := DB.Collection("pantry_categories").CountDocuments(
+		ctx,
+		bson.M{"type": "predefined"},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to check existing predefined categories: %v", err)
+	}
+
+	// If categories already exist, skip seeding
+	if count > 0 {
+		log.Printf("Predefined categories already exist (%d found), skipping seeding", count)
+		return nil
+	}
+
+	// Define predefined categories
+	predefinedCategories := []string{
+		"Dairy",
+		"Fruits",
+		"Vegetables",
+		"Grains & Cereals",
+		"Meat & Poultry",
+		"Seafood",
+		"Beverages",
+		"Snacks",
+		"Condiments & Sauces",
+		"Spices & Seasonings",
+		"Baking Supplies",
+		"Frozen Foods",
+		"Canned Goods",
+		"Oils & Vinegars",
+		"Nuts & Seeds",
+		"Bread & Bakery",
+		"Pasta & Rice",
+		"Cleaning Supplies",
+		"Personal Care",
+		"Other",
+	}
+
+	// Create category documents
+	var categories []interface{}
+	for _, name := range predefinedCategories {
+		category := models.CreatePredefinedCategory(name)
+		categories = append(categories, category)
+	}
+
+	// Insert all predefined categories
+	result, err := DB.Collection("pantry_categories").InsertMany(ctx, categories)
+	if err != nil {
+		return fmt.Errorf("failed to insert predefined categories: %v", err)
+	}
+
+	log.Printf("Successfully seeded %d predefined categories", len(result.InsertedIDs))
 	return nil
 }
