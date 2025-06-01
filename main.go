@@ -52,6 +52,27 @@ func main() {
 	http.HandleFunc("/api/chores/recurring/update", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.UpdateRecurringChoreHandler)))
 	http.HandleFunc("/api/chores/recurring/delete", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.DeleteRecurringChoreHandler)))
 
+	// Pantry Category routes - NEW
+	http.HandleFunc("/api/pantry/categories", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.GetPantryCategoriesHandler)))
+
+	// Create category with validation
+	createCategoryValidation := middleware.ValidateRequest(handlers.CreatePantryCategoryHandler, handlers.CreateCategoryRequest{})
+	http.HandleFunc("/api/pantry/categories/create", middleware.CORSMiddleware(middleware.AuthMiddleware(createCategoryValidation)))
+
+	// Update/Delete category routes (dynamic based on method)
+	http.HandleFunc("/api/pantry/categories/", middleware.CORSMiddleware(middleware.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodPut:
+			// Apply validation for update
+			updateCategoryValidation := middleware.ValidateRequest(handlers.UpdatePantryCategoryHandler, handlers.UpdateCategoryRequest{})
+			updateCategoryValidation(w, r)
+		case http.MethodDelete:
+			handlers.DeletePantryCategoryHandler(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})))
+
 	// Pantry routes - existing - wrap with CORS middleware
 	http.HandleFunc("/api/pantry/add", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.AddPantryItemHandler)))
 	http.HandleFunc("/api/pantry/update/", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.UpdatePantryItemHandler)))
