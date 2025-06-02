@@ -28,6 +28,29 @@ type UpdateCategoryRequest struct {
 	Name string `json:"name" validate:"required,min=1"`
 }
 
+// CategoryWithCreator represents a category with creator information
+type CategoryWithCreator struct {
+	ID          primitive.ObjectID `json:"id"`
+	Name        string             `json:"name"`
+	Type        string             `json:"type"`
+	GroupID     *string            `json:"group_id,omitempty"`
+	GroupName   *string            `json:"group_name,omitempty"`
+	CreatedBy   *string            `json:"created_by,omitempty"`
+	CreatedByID *string            `json:"created_by_id,omitempty"`
+}
+
+// StructuredCategoryResponse represents the new structured response format
+type StructuredCategoryResponse struct {
+	GroupName  string           `json:"group_name"`
+	GroupID    string           `json:"group_id"`
+	Categories CategoriesByType `json:"categories"`
+}
+
+type CategoriesByType struct {
+	Predefined  []CategoryWithCreator `json:"predefined"`
+	UserDefined []CategoryWithCreator `json:"user_defined"`
+}
+
 // CategoryResponse defines the response structure for category operations
 type CategoryResponse struct {
 	Status  string      `json:"status"`
@@ -35,7 +58,7 @@ type CategoryResponse struct {
 	Data    interface{} `json:"data,omitempty"`
 }
 
-// GetPantryCategoriesHandler retrieves all available categories for a group (predefined + custom)
+// GetPantryCategoriesHandler retrieves all available categories for a group in structured format
 func GetPantryCategoriesHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -46,6 +69,13 @@ func GetPantryCategoriesHandler(w http.ResponseWriter, r *http.Request) {
 	userClaims, ok := middleware.GetUserFromContext(r.Context())
 	if !ok {
 		http.Error(w, "User not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	// Get group_name from query parameter
+	groupName := r.URL.Query().Get("group_name")
+	if groupName == "" {
+		http.Error(w, "group_name parameter is required", http.StatusBadRequest)
 		return
 	}
 
@@ -69,6 +99,28 @@ func GetPantryCategoriesHandler(w http.ResponseWriter, r *http.Request) {
 		} else {
 			http.Error(w, "Failed to fetch user", http.StatusInternalServerError)
 		}
+		return
+	}
+
+	// Find the group by name
+	var group models.Group
+	err = config.DB.Collection("groups").FindOne(
+		context.Background(),
+		bson.M{"name": groupName},
+	).Decode(&group)
+
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			http.Error(w, "Group not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Failed to fetch group", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Verify user belongs to the group
+	if user.GroupID != group.ID {
+		http.Error(w, "User is not a member of this group", http.StatusForbidden)
 		return
 	}
 
@@ -110,12 +162,56 @@ func GetPantryCategoriesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Separate categories by type and add creator information
+	predefinedCategories := []CategoryWithCreator{}
+	userDefinedCategories := []CategoryWithCreator{}
+
+	for _, category := range categories {
+		categoryWithCreator := CategoryWithCreator{
+			ID:   category.ID,
+			Name: category.Name,
+			Type: string(category.Type),
+		}
+
+		if category.IsPredefined() {
+			predefinedCategories = append(predefinedCategories, categoryWithCreator)
+		} else {
+			// For custom categories, add group and creator information
+			groupIDStr := category.GroupID.Hex()
+			categoryWithCreator.GroupID = &groupIDStr
+			categoryWithCreator.GroupName = &group.Name
+
+			// Get creator information
+			if category.CreatedBy != nil {
+				var creator models.User
+				err := config.DB.Collection("users").FindOne(
+					context.Background(),
+					bson.M{"_id": *category.CreatedBy},
+				).Decode(&creator)
+
+				if err == nil {
+					createdByIDStr := creator.ID.Hex()
+					categoryWithCreator.CreatedBy = &creator.Name
+					categoryWithCreator.CreatedByID = &createdByIDStr
+				}
+			}
+
+			userDefinedCategories = append(userDefinedCategories, categoryWithCreator)
+		}
+	}
+
+	// Build structured response
+	response := StructuredCategoryResponse{
+		GroupName: group.Name,
+		GroupID:   group.ID.Hex(),
+		Categories: CategoriesByType{
+			Predefined:  predefinedCategories,
+			UserDefined: userDefinedCategories,
+		},
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(CategoryResponse{
-		Status:  "success",
-		Message: "Categories retrieved successfully",
-		Data:    categories,
-	})
+	json.NewEncoder(w).Encode(response)
 }
 
 // CreatePantryCategoryHandler creates a new custom category for the group
@@ -318,7 +414,7 @@ func UpdatePantryCategoryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// CRITICAL FIX: Check permissions FIRST before doing anything else
+	// Check permissions FIRST before doing anything else
 	if !category.CanBeEditedBy(userID, user.GroupID) {
 		if category.IsPredefined() {
 			http.Error(w, "Predefined categories cannot be edited", http.StatusForbidden)
@@ -465,7 +561,7 @@ func DeletePantryCategoryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// CRITICAL FIX: Check permissions FIRST
+	// Check permissions FIRST
 	if !category.CanBeDeletedBy(userID, user.GroupID) {
 		if category.IsPredefined() {
 			http.Error(w, "Predefined categories cannot be deleted", http.StatusForbidden)
@@ -475,10 +571,10 @@ func DeletePantryCategoryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if any pantry items are using this category
+	// Check if any pantry items are using this category by ID
 	itemCount, err := config.DB.Collection("pantry_items").CountDocuments(
 		context.Background(),
-		bson.M{"category": category.Name},
+		bson.M{"category_id": categoryID},
 	)
 
 	if err != nil {

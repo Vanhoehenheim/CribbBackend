@@ -52,7 +52,8 @@ func main() {
 	http.HandleFunc("/api/chores/recurring/update", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.UpdateRecurringChoreHandler)))
 	http.HandleFunc("/api/chores/recurring/delete", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.DeleteRecurringChoreHandler)))
 
-	// Pantry Category routes - NEW
+	// Pantry Category routes - NEW STRUCTURED ENDPOINT
+	// GET /api/pantry/categories?group_name={group_name} - Returns structured response with predefined and user_defined categories
 	http.HandleFunc("/api/pantry/categories", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.GetPantryCategoriesHandler)))
 
 	// Create category with validation
@@ -73,14 +74,26 @@ func main() {
 		}
 	})))
 
-	// Pantry routes - existing - wrap with CORS middleware
-	http.HandleFunc("/api/pantry/add", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.AddPantryItemHandler)))
-	http.HandleFunc("/api/pantry/update/", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.UpdatePantryItemHandler)))
-	http.HandleFunc("/api/pantry/use", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.UsePantryItemHandler)))
+	// Pantry routes - UPDATED to require category_id and include resolved category info
+	// Add pantry item - now requires category_id (no fallbacks)
+	addPantryValidation := middleware.ValidateRequest(handlers.AddPantryItemHandler, handlers.AddPantryItemRequest{})
+	http.HandleFunc("/api/pantry/add", middleware.CORSMiddleware(middleware.AuthMiddleware(addPantryValidation)))
+
+	// Update pantry item - now requires category_id (no fallbacks)
+	updatePantryValidation := middleware.ValidateRequest(handlers.UpdatePantryItemHandler, handlers.UpdatePantryItemRequest{})
+	http.HandleFunc("/api/pantry/update/", middleware.CORSMiddleware(middleware.AuthMiddleware(updatePantryValidation)))
+
+	// Use pantry item
+	usePantryValidation := middleware.ValidateRequest(handlers.UsePantryItemHandler, handlers.UsePantryItemRequest{})
+	http.HandleFunc("/api/pantry/use", middleware.CORSMiddleware(middleware.AuthMiddleware(usePantryValidation)))
+
+	// Get pantry items - now includes resolved category info and supports category_id filter
 	http.HandleFunc("/api/pantry/list", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.GetPantryItemsHandler)))
+
+	// Delete pantry item
 	http.HandleFunc("/api/pantry/remove/", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.DeletePantryItemHandler)))
 
-	// Pantry routes - new - wrap with CORS middleware
+	// Pantry management routes - existing functionality
 	http.HandleFunc("/api/pantry/warnings", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.GetPantryWarningsHandler)))
 	http.HandleFunc("/api/pantry/expiring", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.GetPantryExpiringHandler)))
 	http.HandleFunc("/api/pantry/shopping-list", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.GetPantryShoppingListHandler)))
@@ -116,7 +129,7 @@ func main() {
 				middleware.GroupAccessControlMiddleware(
 					handlers.ListShoppingCartItemsHandler))))
 
-	// New shopping cart activity routes
+	// Shopping cart activity routes
 	http.HandleFunc("/api/shopping-cart/activity",
 		middleware.CORSMiddleware(
 			middleware.AuthMiddleware(
