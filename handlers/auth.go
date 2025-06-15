@@ -174,6 +174,7 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 				LastName:   lastName,
 				Phone:      newUser.PhoneNumber,
 				RoomNumber: newUser.RoomNumber,
+				Score:      newUser.Score,
 				GroupCode:  groupCode,
 			},
 			Message: "Registration successful",
@@ -228,6 +229,7 @@ type UserData struct {
 	LastName   string `json:"lastName"`
 	Phone      string `json:"phone"`
 	RoomNumber string `json:"roomNo"`
+	Score      int    `json:"score"`
 	GroupCode  string `json:"groupCode,omitempty"`
 	GroupName  string `json:"groupName,omitempty"`
 }
@@ -304,6 +306,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 			LastName:   lastName,
 			Phone:      user.PhoneNumber,
 			RoomNumber: user.RoomNumber,
+			Score:      user.Score,
 			GroupCode:  user.GroupCode,
 		},
 		Message: "Login successful",
@@ -366,6 +369,7 @@ func GetUserProfileHandler(w http.ResponseWriter, r *http.Request) {
 		LastName:   lastName,
 		Phone:      user.PhoneNumber,
 		RoomNumber: user.RoomNumber,
+		Score:      user.Score,
 		GroupCode:  user.GroupCode,
 		GroupName:  user.Group, // Add the existing group name field
 	}

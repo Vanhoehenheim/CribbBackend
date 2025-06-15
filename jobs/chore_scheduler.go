@@ -117,6 +117,7 @@ func processRecurringChores() {
 					bson.M{
 						"$set": bson.M{
 							"next_assignment": nextAssignment,
+							"current_index":   freshRC.CurrentIndex,
 							"updated_at":      time.Now(),
 						},
 					},

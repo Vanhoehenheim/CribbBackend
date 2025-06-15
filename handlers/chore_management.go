@@ -430,3 +430,52 @@ func DeleteRecurringChoreHandler(w http.ResponseWriter, r *http.Request) {
 		"message": "Recurring chore and pending instances deleted successfully",
 	})
 }
+
+// ClearCompletedChoresHandler deletes all completed chores for a given group
+func ClearCompletedChoresHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	groupName := r.URL.Query().Get("group_name")
+	if groupName == "" {
+		http.Error(w, "Group name is required", http.StatusBadRequest)
+		return
+	}
+
+	// Find group by name
+	var group models.Group
+	err := config.DB.Collection("groups").FindOne(
+		context.Background(),
+		bson.M{"name": groupName},
+	).Decode(&group)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			http.Error(w, "Group not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Failed to fetch group", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	// Delete all completed chores for this group
+	result, err := config.DB.Collection("chores").DeleteMany(
+		context.Background(),
+		bson.M{
+			"group_id": group.ID,
+			"status":   models.ChoreStatusCompleted,
+		},
+	)
+	if err != nil {
+		log.Printf("Failed to delete completed chores: %v", err)
+		http.Error(w, "Failed to clear completed chores", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"deleted_count": result.DeletedCount,
+		"message":       "Completed chores cleared successfully",
+	})
+}

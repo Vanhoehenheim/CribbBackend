@@ -36,7 +36,10 @@ func main() {
 	// Group routes - wrap existing middleware with CORS middleware
 	http.HandleFunc("/api/groups", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.CreateGroupHandler)))
 	http.HandleFunc("/api/groups/join", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.JoinGroupHandler)))
+	http.HandleFunc("/api/groups/leave", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.LeaveGroupHandler)))
 	http.HandleFunc("/api/groups/members", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.GetGroupMembersHandler)))
+	http.HandleFunc("/api/groups/details", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.GetGroupDetailsHandler)))
+	http.HandleFunc("/api/groups/leaderboard", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.GetGroupLeaderboardHandler)))
 
 	// Chore routes - existing - wrap with CORS middleware
 	http.HandleFunc("/api/chores/individual", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.CreateIndividualChoreHandler)))
@@ -51,6 +54,7 @@ func main() {
 	http.HandleFunc("/api/chores/delete", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.DeleteChoreHandler)))
 	http.HandleFunc("/api/chores/recurring/update", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.UpdateRecurringChoreHandler)))
 	http.HandleFunc("/api/chores/recurring/delete", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.DeleteRecurringChoreHandler)))
+	http.HandleFunc("/api/chores/clear-completed", middleware.CORSMiddleware(middleware.AuthMiddleware(handlers.ClearCompletedChoresHandler)))
 
 	// Pantry Category routes - NEW STRUCTURED ENDPOINT
 	// GET /api/pantry/categories?group_name={group_name} - Returns structured response with predefined and user_defined categories

@@ -237,6 +237,16 @@ func CreateRecurringChoreHandler(w http.ResponseWriter, r *http.Request) {
 	// Create the first instance of this recurring chore
 	firstChore := models.CreateChoreFromRecurring(recurringChore)
 
+	// Persist the updated current_index after the first assignment
+	_, err = config.DB.Collection("recurring_chores").UpdateOne(
+		context.Background(),
+		bson.M{"_id": recurringChore.ID},
+		bson.M{"$set": bson.M{"current_index": recurringChore.CurrentIndex}},
+	)
+	if err != nil {
+		log.Printf("Failed to update recurring chore current index: %v", err)
+	}
+
 	// Insert the first chore instance
 	_, err = config.DB.Collection("chores").InsertOne(context.Background(), firstChore)
 	if err != nil {
