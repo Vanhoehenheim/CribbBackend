@@ -1,0 +1,8 @@
+[build]
+buildCommand = "go build -o main ."
+
+[deploy]
+startCommand = "./main"
+
+[env]
+HOST = "0.0.0.0"  # Force the host to be 0.0.0.0

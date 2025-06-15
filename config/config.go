@@ -28,9 +28,11 @@ func init() {
 
 // ConnectDB initializes MongoDB connection and sets up the database
 func ConnectDB() {
-	// Load .env file
+	// Load .env file (optional). If the file does not exist, fall back to OS environment variables.
+	// This allows the service to run in containerized environments (Railway, Docker, etc.)
+	// where environment variables are injected at runtime instead of a physical .env file.
 	if err := godotenv.Load(); err != nil {
-		log.Fatal("Error loading .env file:", err)
+		log.Println("No .env file found; continuing with environment variables from the host")
 	}
 
 	// Get and validate environment variables
