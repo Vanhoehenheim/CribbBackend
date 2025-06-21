@@ -88,6 +88,15 @@ func UpdateChoreHandler(w http.ResponseWriter, r *http.Request) {
 
 	if !request.DueDate.IsZero() {
 		updateFields["due_date"] = request.DueDate
+
+		// Re-evaluate status based on the new due date
+		var newStatus models.ChoreStatus
+		if request.DueDate.Before(time.Now()) {
+			newStatus = models.ChoreStatusOverdue
+		} else {
+			newStatus = models.ChoreStatusPending
+		}
+		updateFields["status"] = newStatus
 	}
 
 	if request.Points > 0 {
@@ -229,12 +238,13 @@ func UpdateRecurringChoreHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var request struct {
-		RecurringChoreID string `json:"recurring_chore_id"`
-		Title            string `json:"title"`
-		Description      string `json:"description"`
-		Frequency        string `json:"frequency"` // daily, weekly, biweekly, monthly
-		Points           int    `json:"points"`
-		IsActive         *bool  `json:"is_active"` // Pointer to allow nil checks
+		RecurringChoreID string   `json:"recurring_chore_id"`
+		Title            string   `json:"title"`
+		Description      string   `json:"description"`
+		Frequency        string   `json:"frequency"` // daily, weekly, biweekly, monthly
+		Points           int      `json:"points"`
+		IsActive         *bool    `json:"is_active"`
+		MemberUsernames  []string `json:"member_usernames"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -310,6 +320,33 @@ func UpdateRecurringChoreHandler(w http.ResponseWriter, r *http.Request) {
 
 	if request.IsActive != nil {
 		updateFields["is_active"] = *request.IsActive
+	}
+
+	if len(request.MemberUsernames) > 0 {
+		// Build new rotation list
+		newRotation := make([]primitive.ObjectID, 0, len(request.MemberUsernames))
+		for _, username := range request.MemberUsernames {
+			var u models.User
+			err := config.DB.Collection("users").FindOne(
+				context.Background(),
+				bson.M{"username": username, "group_id": recurringChore.GroupID},
+			).Decode(&u)
+			if err != nil {
+				if errors.Is(err, mongo.ErrNoDocuments) {
+					http.Error(w, "User "+username+" not found in group", http.StatusBadRequest)
+				} else {
+					http.Error(w, "Failed to fetch user "+username, http.StatusInternalServerError)
+				}
+				return
+			}
+			newRotation = append(newRotation, u.ID)
+		}
+		if len(newRotation) == 0 {
+			http.Error(w, "No valid users provided for member rotation", http.StatusBadRequest)
+			return
+		}
+		updateFields["member_rotation"] = newRotation
+		updateFields["current_index"] = 0
 	}
 
 	// Update recurring chore in the database

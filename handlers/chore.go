@@ -120,11 +120,12 @@ func CreateRecurringChoreHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var request struct {
-		Title       string `json:"title"`
-		Description string `json:"description"`
-		GroupName   string `json:"group_name"`
-		Frequency   string `json:"frequency"` // daily, weekly, biweekly, monthly
-		Points      int    `json:"points"`
+		Title           string   `json:"title"`
+		Description     string   `json:"description"`
+		GroupName       string   `json:"group_name"`
+		Frequency       string   `json:"frequency"` // daily, weekly, biweekly, monthly
+		Points          int      `json:"points"`
+		MemberUsernames []string `json:"member_usernames"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -171,32 +172,61 @@ func CreateRecurringChoreHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch group members for rotation
-	cursor, err := config.DB.Collection("users").Find(
-		context.Background(),
-		bson.M{"group_id": group.ID},
-	)
-	if err != nil {
-		http.Error(w, "Failed to fetch group members", http.StatusInternalServerError)
-		return
-	}
-	defer cursor.Close(context.Background())
-
-	var users []models.User
-	if err = cursor.All(context.Background(), &users); err != nil {
-		http.Error(w, "Failed to decode users", http.StatusInternalServerError)
-		return
-	}
-
-	if len(users) == 0 {
-		http.Error(w, "Group has no members to assign chores to", http.StatusBadRequest)
-		return
-	}
-
 	// Create member rotation array
-	memberRotation := make([]primitive.ObjectID, 0, len(users))
-	for _, user := range users {
-		memberRotation = append(memberRotation, user.ID)
+	var memberRotation []primitive.ObjectID
+
+	if len(request.MemberUsernames) > 0 {
+		// Use provided list of usernames
+		memberRotation = make([]primitive.ObjectID, 0, len(request.MemberUsernames))
+		for _, username := range request.MemberUsernames {
+			var u models.User
+			err := config.DB.Collection("users").FindOne(
+				context.Background(),
+				bson.M{"username": username, "group_id": group.ID},
+			).Decode(&u)
+			if err != nil {
+				if errors.Is(err, mongo.ErrNoDocuments) {
+					http.Error(w, "User "+username+" not found in group", http.StatusBadRequest)
+				} else {
+					http.Error(w, "Failed to fetch user "+username, http.StatusInternalServerError)
+				}
+				return
+			}
+			memberRotation = append(memberRotation, u.ID)
+		}
+		if len(memberRotation) == 0 {
+			http.Error(w, "No valid users provided for member rotation", http.StatusBadRequest)
+			return
+		}
+	} else {
+		// Default behaviour: all group members
+		// Fetch group members for rotation
+		cursor, err := config.DB.Collection("users").Find(
+			context.Background(),
+			bson.M{"group_id": group.ID},
+		)
+		if err != nil {
+			http.Error(w, "Failed to fetch group members", http.StatusInternalServerError)
+			return
+		}
+		defer cursor.Close(context.Background())
+
+		var users []models.User
+		if err = cursor.All(context.Background(), &users); err != nil {
+			http.Error(w, "Failed to decode users", http.StatusInternalServerError)
+			return
+		}
+
+		if len(users) == 0 {
+			http.Error(w, "Group has no members to assign chores to", http.StatusBadRequest)
+			return
+		}
+
+		// Create member rotation array
+		memberRotation = make([]primitive.ObjectID, 0, len(users))
+		for _, user := range users {
+			memberRotation = append(memberRotation, user.ID)
+		}
 	}
 
 	// Create the recurring chore
