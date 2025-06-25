@@ -148,19 +148,14 @@ func detectOverdueChores() {
 	year, month, day := time.Now().UTC().Date()
 	startOfTodayUTC := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 
-	// Find all pending chores where the start of today UTC is
-	// at or after the start of the day FOLLOWING the chore's due date.
-	// This means the entire due date has passed.
-	// We can't directly compare with AddDate in BSON, so we query
-	// for due dates less than the start of *yesterday*.
-	startOfYesterdayUTC := startOfTodayUTC.AddDate(0, 0, -1)
+	// Any pending chore whose due date is strictly before the start of today UTC
+	// has had its entire due day pass and should now be considered overdue.
 
 	result, err := config.DB.Collection("chores").UpdateMany(
 		context.Background(),
 		bson.M{
-			"status": models.ChoreStatusPending,
-			// Due date is strictly less than the start of yesterday UTC
-			"due_date": bson.M{"$lt": startOfYesterdayUTC},
+			"status":   models.ChoreStatusPending,
+			"due_date": bson.M{"$lt": startOfTodayUTC},
 		},
 		bson.M{
 			"$set": bson.M{

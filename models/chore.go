@@ -65,6 +65,14 @@ type ChoreCompletion struct {
 	Points      int                `bson:"points" json:"points"`
 }
 
+// endOfDayUTC returns a time at 23:59:00 UTC for the date portion of the supplied time
+func endOfDayUTC(t time.Time) time.Time {
+	// Work in UTC so that comparisons on the backend remain consistent
+	utc := t.UTC()
+	year, month, day := utc.Date()
+	return time.Date(year, month, day, 23, 59, 0, 0, time.UTC)
+}
+
 // CreateChore creates a new individual chore
 func CreateChore(title, description string, groupID, assignedTo primitive.ObjectID, dueDate time.Time, points int) *Chore {
 	return &Chore{
@@ -116,17 +124,20 @@ func CreateChoreFromRecurring(recurringChore *RecurringChore) *Chore {
 	assignedTo := recurringChore.GetNextAssignee()
 
 	// Calculate due date based on frequency
-	dueDate := time.Now()
+	now := time.Now()
 	switch recurringChore.Frequency {
 	case "daily":
-		dueDate = dueDate.Add(24 * time.Hour)
+		// Due at the end of the current day
+		now = now
 	case "weekly":
-		dueDate = dueDate.Add(7 * 24 * time.Hour)
+		now = now.AddDate(0, 0, 7)
 	case "biweekly":
-		dueDate = dueDate.Add(14 * 24 * time.Hour)
+		now = now.AddDate(0, 0, 14)
 	case "monthly":
-		dueDate = dueDate.AddDate(0, 1, 0)
+		now = now.AddDate(0, 1, 0)
 	}
+
+	dueDate := endOfDayUTC(now)
 
 	return &Chore{
 		Title:       recurringChore.Title,
@@ -149,18 +160,11 @@ func CreateChoreFromRecurringWithBaseDate(recurringChore *RecurringChore, baseDa
 	// Get the next assignee
 	assignedTo := recurringChore.GetNextAssignee()
 
-	// Calculate due date based on frequency from the base date
+	// The provided baseDate already contains the exact timestamp we want (it
+	// was calculated on the client as the end-of-day in the user's local
+	// timezone and expressed in UTC). Using it as-is prevents an extra
+	// timezone shift.
 	dueDate := baseDate
-	switch recurringChore.Frequency {
-	case "daily":
-		dueDate = dueDate.Add(24 * time.Hour)
-	case "weekly":
-		dueDate = dueDate.Add(7 * 24 * time.Hour)
-	case "biweekly":
-		dueDate = dueDate.Add(14 * 24 * time.Hour)
-	case "monthly":
-		dueDate = dueDate.AddDate(0, 1, 0)
-	}
 
 	return &Chore{
 		Title:       recurringChore.Title,

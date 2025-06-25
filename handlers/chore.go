@@ -126,6 +126,7 @@ func CreateRecurringChoreHandler(w http.ResponseWriter, r *http.Request) {
 		Frequency       string   `json:"frequency"` // daily, weekly, biweekly, monthly
 		Points          int      `json:"points"`
 		MemberUsernames []string `json:"member_usernames"`
+		FirstDueDate    string   `json:"first_due_date"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -264,8 +265,18 @@ func CreateRecurringChoreHandler(w http.ResponseWriter, r *http.Request) {
 	// Set the inserted ID
 	recurringChore.ID = result.InsertedID.(primitive.ObjectID)
 
-	// Create the first instance of this recurring chore
-	firstChore := models.CreateChoreFromRecurring(recurringChore)
+	// Create the first instance of this recurring chore. If the client supplied
+	// a first_due_date we honour it so the deadline matches the user's local
+	// date. Otherwise we fall back to server-calculated logic.
+	var firstChore *models.Chore
+	if request.FirstDueDate != "" {
+		if ts, err := time.Parse(time.RFC3339, request.FirstDueDate); err == nil {
+			firstChore = models.CreateChoreFromRecurringWithBaseDate(recurringChore, ts)
+		}
+	}
+	if firstChore == nil {
+		firstChore = models.CreateChoreFromRecurring(recurringChore)
+	}
 
 	// Persist the updated current_index after the first assignment
 	_, err = config.DB.Collection("recurring_chores").UpdateOne(
