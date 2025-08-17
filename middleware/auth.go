@@ -90,15 +90,32 @@ func GetUserFromContext(ctx context.Context) (UserClaims, bool) {
 // CORSMiddleware handles Cross-Origin Resource Sharing
 func CORSMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Get allowed origin from environment variable so we can work in development and production
-		// Example: FRONTEND_URL=https://cribbfrontend-production.up.railway.app
-		allowedOrigin := os.Getenv("FRONTEND_URL")
-		if allowedOrigin == "" {
-			allowedOrigin = "http://localhost:4200" // default for local dev
+		origin := r.Header.Get("Origin")
+
+		// Get allowed origins from environment variable (semicolon-separated)
+		// This comes from GCP Secret Manager and is injected as an environment variable
+		// Example: FRONTEND_URL=http://localhost:4200;https://cribb-home.vercel.app
+		frontendURLs := os.Getenv("FRONTEND_URL")
+		if frontendURLs == "" {
+			frontendURLs = "http://localhost:4200" // default for local dev
 		}
 
-		// Set CORS headers
-		w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+		// Split semicolon-separated origins and check if request origin is allowed
+		allowedOrigins := strings.Split(frontendURLs, ";")
+		var allowedOrigin string
+
+		for _, allowed := range allowedOrigins {
+			if origin == strings.TrimSpace(allowed) {
+				allowedOrigin = origin
+				break
+			}
+		}
+
+		// Set CORS headers only if origin is allowed
+		if allowedOrigin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+		}
+
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept, X-Requested-With")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
